@@ -1,0 +1,93 @@
+<?php
+
+/**
+ * Implements hook_cron().
+ */
+function google_events_cron() {
+    // Ensure that the necessary services are available.
+    if (\Drupal::moduleHandler()->moduleExists('google_events')) {
+        $googleCalendarService = \Drupal::service('google_events.common_service');
+        $googleEvents = $googleCalendarService->getCalendarEvents();
+     
+        $addEventsFromGoogle = $googleCalendarService->createDrupalEvents($googleEvents);
+    }
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function google_events_entity_insert(Drupal\Core\Entity\EntityInterface $entity) {
+    // Check if the created entity is of type 'event'.
+    if ($entity->getEntityTypeId() === 'node' && $entity->bundle() === 'event') {
+        $googleCalendarService = \Drupal::service('google_events.common_service');
+        // Get data from the created Drupal node.
+        $drupalEvents = [
+            $entity,
+            // You can add more nodes if needed.
+        ];
+
+        // Call the function to create events on Google Calendar.
+        $createdEvents = $googleCalendarService->createGoogleCalendarEvent($drupalEvents);
+
+        // Optionally, log information about the created Google Calendar events.
+        \Drupal::logger('google_events')->info('Created events on Google Calendar: @events', ['@events' => print_r($createdEvents, true)]);
+    }
+  }
+
+
+  /**
+ * Implements hook_entity_update().
+ */
+function google_events_entity_update(Drupal\Core\Entity\EntityInterface $entity) {
+    // Check if the updated entity is of type 'event' and has a populated 'id' field.
+    if ($entity->getEntityTypeId() === 'node' && $entity->bundle() === 'event') {
+        $idField = $entity->get('field_id')->value;
+
+        if (!empty($idField)) {
+            $googleCalendarService = \Drupal::service('google_events.common_service');
+            // Assuming $node is the Drupal node object.
+            $eventStartDate = $entity->get('field_event_start')->value;
+            $eventTime = $entity->get('field_event_time')->value;
+
+            // Convert the date to a DateTime object.
+            $startDate = new \DateTime($eventStartDate);
+
+            // Extract the time components.
+            list($hours, $minutes) = explode(':', $eventTime);
+
+            // Set the time components to the DateTime object.
+            $startDate->setTime($hours, $minutes);
+
+            // Format the DateTime object in the desired format.
+            $formattedDateTime = $startDate->format('Y-m-d\TH:i:s\Z');
+
+
+            // Get data from the updated Drupal node.
+            $updateData = [
+                'summary' => $entity->getTitle(),
+                'description' => $entity->get('body')->value,
+                'start' => ['dateTime' => $formattedDateTime],
+                'end' => ['dateTime' => $formattedDateTime],
+                'location' => $entity->get('field_event_address')->value,
+                // Include other fields as needed for the update.
+            ];
+
+            // Call the function to update the event on Google Calendar.
+            $updatedEvent = $googleCalendarService->updateCalendarEvent($idField, $updateData);
+            
+            // Optionally, log information about the updated Google Calendar event.
+            \Drupal::logger('google_events')->info('Updated event on Google Calendar: @event', ['@event' => print_r($updatedEvent, true)]);
+        }
+    }
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function google_events_entity_delete(Drupal\Core\Entity\EntityInterface $entity) {
+    if ($entity->getEntityTypeId() === 'node' && $entity->bundle() === 'event') {
+        $eventService = \Drupal::service('google_events.common_service');
+
+        $eventService->deleteEventFromGoogleCalendar($entity->get('field_id')->value);
+    }
+}

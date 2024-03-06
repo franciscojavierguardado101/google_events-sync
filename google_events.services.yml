@@ -1,0 +1,8 @@
+services:
+  google_events.common_service:
+    class: Drupal\google_events\GCCommonService
+    arguments: ['@entity_type.manager']
+  google_events.event_controller:
+    class: '\Drupal\google_events\Controller\EventController'
+    tags:
+      - { name: 'controller.service_arguments' }
